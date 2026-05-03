@@ -2,6 +2,7 @@
 
 #include "WString.h"
 #include <cstdint>
+#include <vector>
 
 class IPAddress {
  public:
@@ -21,6 +22,9 @@ class IPAddress {
   }
   bool operator!=(const IPAddress& o) const {
     return a_ != o.a_ || b_ != o.b_ || c_ != o.c_ || d_ != o.d_;
+  }
+  bool operator==(const IPAddress& o) const {
+    return a_ == o.a_ && b_ == o.b_ && c_ == o.c_ && d_ == o.d_;
   }
 
  private:
@@ -44,46 +48,67 @@ enum { WIFI_AUTH_OPEN = 0 };
 
 class WiFiClass {
  public:
-  void mode(int) {}
-  wl_status_t status() const { return WL_DISCONNECTED; }
-  void disconnect(bool = true) {}
-  void softAPdisconnect(bool = true) {}
-  bool softAP(const char* ssid, const char* pass = nullptr, int = 1, bool = false, int = 4) {
-    (void)ssid;
-    (void)pass;
-    return false;  // no-op in sim
-  }
-  IPAddress softAPIP() const { return IPAddress(192, 168, 4, 1); }
-  IPAddress localIP() const { return IPAddress(0, 0, 0, 0); }
-  String SSID() const { return String(""); }
+  void mode(int mode);
+  void persistent(bool) {}
+  wl_status_t status() const { return status_; }
+  void disconnect(bool = true, bool = false);
+  void softAPdisconnect(bool = true);
+  bool softAP(const char* ssid, const char* pass = nullptr, int = 1, bool = false, int = 4);
+  IPAddress softAPIP() const { return apIp_; }
+  String softAPSSID() const { return apEnabled_ ? currentSsid_ : String(""); }
+  IPAddress localIP() const { return localIp_; }
+  String SSID() const { return currentSsid_; }
   String SSID(int i) const {
-    (void)i;
-    return String("");
+    if (i < 0 || static_cast<size_t>(i) >= scanResults_.size()) return String("");
+    return scanResults_[static_cast<size_t>(i)].ssid;
   }
-  wifi_mode_t getMode() const { return WIFI_MODE_NULL; }
-  String getHostname() const { return String(""); }
+  wifi_mode_t getMode() const { return mode_; }
+  String getHostname() const { return String("crosspoint-emulator"); }
+  bool setHostname(const char*) { return true; }
   void setSleep(bool) {}
-  int softAPgetStationNum() const { return 0; }
+  int softAPgetStationNum() const { return apEnabled_ ? 1 : 0; }
   void macAddress(uint8_t* mac) {
     for (int i = 0; i < 6; i++) mac[i] = 0;
   }
-  void scanDelete() {}
-  int16_t scanNetworks(bool = false) { return 0; }
-  int16_t scanComplete() { return 0; }
-  int32_t RSSI() const { return 0; }
+  String macAddress() const { return String("00:00:00:00:00:00"); }
+  void scanDelete();
+  int16_t scanNetworks(bool async = false);
+  int16_t scanComplete();
+  int32_t RSSI() const { return -48; }
   int32_t RSSI(int i) const {
-    (void)i;
-    return 0;
+    if (i < 0 || static_cast<size_t>(i) >= scanResults_.size()) return -100;
+    return scanResults_[static_cast<size_t>(i)].rssi;
   }
   int encryptionType(int i) const {
-    (void)i;
-    return WIFI_AUTH_OPEN;
+    if (i < 0 || static_cast<size_t>(i) >= scanResults_.size()) return WIFI_AUTH_OPEN;
+    return scanResults_[static_cast<size_t>(i)].encrypted ? 1 : WIFI_AUTH_OPEN;
   }
-  bool begin(const char* ssid, const char* pass = nullptr) {
-    (void)ssid;
-    (void)pass;
-    return false;
+  int32_t channel(int i) const {
+    if (i < 0 || static_cast<size_t>(i) >= scanResults_.size()) return 1;
+    return scanResults_[static_cast<size_t>(i)].channel;
   }
+  bool begin(const char* ssid, const char* pass = nullptr);
+
+ private:
+  struct ScanResult {
+    String ssid;
+    int32_t rssi = -60;
+    bool encrypted = false;
+    int32_t channel = 1;
+  };
+
+  wifi_mode_t mode_ = WIFI_MODE_STA;
+  wl_status_t status_ = WL_CONNECTED;
+  bool apEnabled_ = false;
+  bool scanActive_ = false;
+  IPAddress apIp_ = IPAddress(192, 168, 4, 1);
+  IPAddress localIp_ = IPAddress(127, 0, 0, 1);
+  String currentSsid_ = String("Crosspoint-Emulator");
+  std::vector<ScanResult> scanResults_ = {
+      {String("Crosspoint-Emulator"), -48, false, 1},
+      {String("Office-5G"), -63, true, 149},
+      {String("Cafe-Wifi"), -72, false, 6},
+  };
 };
 
 extern WiFiClass WiFi;
